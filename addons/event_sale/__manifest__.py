@@ -30,7 +30,7 @@ this event.
         'security/event_security.xml',
         'wizard/event_edit_registration.xml',
     ],
-    'demo': ['data/event_demo.xml'],
+    #'demo': ['data/event_demo.xml'],
     'installable': True,
     'auto_install': True,
     'license': 'LGPL-3',
