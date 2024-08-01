@@ -1,7 +1,9 @@
 # Copyright 2021 ForgeFlow S.L.  <https://www.forgeflow.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl.html).
 from openupgradelib import openupgrade
+import logging
 
+_logger = logging.getLogger(__name__)
 
 def convert_fields(env):
     if openupgrade.column_exists(env.cr, "account_move", "move_type"):
@@ -195,6 +197,24 @@ def add_move_id_field_account_bank_statement_line(env):
         WHERE aml.statement_line_id = absl.id AND absl.move_id IS NULL
         """,
     )
+    openupgrade.logged_query(
+        env.cr, "ALTER TABLE account_move ADD COLUMN absl_id integer"
+    )
+    openupgrade.logged_query(
+        env.cr, "ALTER TABLE account_bank_statement_line ADD COLUMN move_cal boolean"
+    )
+    openupgrade.logged_query(
+        env.cr,
+    """
+    insert into account_move (name,date,journal_id,state,currency_id,move_type,extract_state,currency_rate,absl_id)
+    select concat(absl.payment_ref,'_',absl.id),absl.openupgrade_legacy_14_0_date,absl.journal_id,'draft',1,'entry','no_extract_requested',1 ,absl.id
+    from account_bank_statement_line absl left join account_move_line aml on aml.statement_line_id = absl.id where aml.id is null
+    """)
+    openupgrade.logged_query(
+        env.cr,
+        """
+        update account_bank_statement_line absl set move_cal=true, move_id = (select id from account_move am where am.absl_id=absl.id) where move_id is null
+        """)
     # Assign the reverse link from move to statement line
     if not openupgrade.column_exists(env.cr, "account_move", "statement_line_id"):
         # In v10, the fields exists

@@ -103,6 +103,108 @@ def uninstall_conflicting_it_edi(cr):
 
 @openupgrade.migrate(use_env=False)
 def migrate(cr, version):
+    ############### custion scripts
+    openupgrade.logged_query("""
+WITH duplicates AS (
+    SELECT
+        id,
+        ROW_NUMBER() OVER (PARTITION BY name, currency_id, company_id ORDER BY id) AS rn
+    FROM
+        res_currency_rate rcr 
+)
+DELETE FROM
+    res_currency_rate 
+WHERE
+    id IN (
+        SELECT
+            id
+        FROM
+            duplicates
+        WHERE
+            rn > 1
+    );
+
+update ir_model_data set name = replace (name, ' ', '_') where name like '% %';
+WITH duplicated_uom AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY category_id, uom_type ORDER BY id) AS rn
+    FROM
+        uom_uom rcr
+    where uom_type = 'reference'
+)
+update uom_uom
+set active = false
+WHERE
+    id IN (
+        SELECT
+            id
+        FROM
+            duplicated_uom
+        WHERE
+            rn > 1
+    );
+delete from utm_campaign  where stage_id in
+(select res_id  from ir_model_data imd where name like 'campaign_stage_1');
+
+delete from ir_module_module_dependency where id in (
+select d.id from ir_module_module_dependency d
+join ir_module_module m on m.id = d.module_id
+where m.name in ('account_multicurrency_revaluation','l10n_tr_account_babs_report_xlsx', 'l10n_tr_account_eledger', 'date_range','account_check', 'account_tax_office', 'account_account_type_specifier')
+and d.name = 'account_accountant'
+);
+update ir_module_module set state = 'to remove' where name in (
+'hr_holidays_gantt_calendar', 'account_accountant', 'account_reports', 'account_type_menu', 'account_predictive_bills', 'ocn_client', 'web_diagram'
+);
+update account_account set user_type_id = (select res_id from ir_model_data imd where model = 'account.account.type' and name = 'data_unaffected_earnings') where code ='590000' ;
+update account_account set user_type_id = (select res_id from ir_model_data imd where model = 'account.account.type' and name = 'account_type_current_pl') where code in ('591000', '690000', '692000', '697000', '698000'); 
+
+WITH duplicates AS (
+    SELECT
+        id,category_id,create_date ,name,
+        ROW_NUMBER() OVER (PARTITION BY category_id ,name ORDER BY id) AS rn
+    FROM
+        res_groups rg
+)
+update res_groups rg
+    set name = concat(name,'_',id)
+WHERE
+    id IN (
+        SELECT
+            id
+        FROM
+            duplicates
+        WHERE
+            rn > 1
+    );
+update account_move_line aml
+set currency_id = (select currency_id from account_move_line aml2 where aml2.move_id = aml.move_id and display_type != 'line_section' or display_type is null limit 1),
+amount_currency  = 0,
+credit = 0,
+debit = 0,
+company_id = (select company_id from account_move_line aml2 where aml2.move_id = aml.move_id and display_type != 'line_section' or display_type is null limit 1),
+company_currency_id = (select company_currency_id from account_move_line aml2 where aml2.move_id = aml.move_id and display_type != 'line_section' or display_type is null limit 1)
+where display_type = 'line_section';
+
+update account_move_line l
+set company_currency_id = (select currency_id from res_company co where co.id = l.company_id)
+where company_currency_id is null;
+
+update account_move_line
+set amount_currency = 0
+where amount_currency is null and credit=0 and debit=0;
+
+update account_move_line
+set amount_currency = case when credit > 0 then -1 * credit else debit end where (amount_currency is null or amount_currency = 0) and (credit > 0 or debit > 0);
+
+delete from decimal_precision dp where name = 'Bank Statement Line';
+delete from ir_model_data imd where res_id = 8 and model ='decimal.precision';
+
+    """)
+
+
+
+    ###############
     """
     Don't request an env for the base pre migration as flushing the env in
     odoo/modules/registry.py will break on the 'base' module not yet having
