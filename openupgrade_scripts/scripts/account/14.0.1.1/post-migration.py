@@ -833,6 +833,15 @@ def update_payment_state_partial(env):
         """,
     )
 
+# def fill_back_journal_id_data_account_payment(env):
+#     openupgrade.logged_query(env.cr,
+#         """
+#         UPDATE account_payment ap
+#         SET journal_id = %s
+#         WHERE journal_id is null
+#         """% (openupgrade.get_legacy_name("journal_id"))
+#     )
+
 
 @openupgrade.migrate()
 def migrate(env, version):
@@ -868,3 +877,4 @@ def migrate(env, version):
         "account",
         ["email_template_edi_invoice", "mail_template_data_payment_receipt"],
     )
+    # fill_back_journal_id_data_account_payment(env)

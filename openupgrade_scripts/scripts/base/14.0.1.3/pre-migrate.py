@@ -104,7 +104,7 @@ def uninstall_conflicting_it_edi(cr):
 @openupgrade.migrate(use_env=False)
 def migrate(cr, version):
     ############### custion scripts
-    openupgrade.logged_query("""
+    openupgrade.logged_query(cr, """
 WITH duplicates AS (
     SELECT
         id,
